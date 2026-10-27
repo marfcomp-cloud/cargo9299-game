@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cargo 9299 — 3D Склад: Отправка на Москву</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #fff; }
+    #canvas-container { width: 100%; height: 100%; position: absolute; left: 0; top: 0; z-index: 1; }
+    
+    /* HUD */
+    #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+    
+    /* Top Bar */
+    .top-bar { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; }
+    .brand-badge { background: rgba(18, 24, 38, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 215, 0, 0.4); border-radius: 12px; padding: 8px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .brand-title { font-size: 18px; font-weight: 800; color: #ffd700; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+    .brand-sub { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-top: 2px; }
+    
+    .stats-card { background: rgba(18, 24, 38, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 8px 16px; text-align: right; }
+    .score-val { font-size: 22px; font-weight: 800; color: #10b981; }
+    .level-val { font-size: 11px; color: #94a3b8; text-transform: uppercase; }
+    
+    /* Quest Banner */
+    .quest-banner { align-self: center; background: rgba(15, 23, 42, 0.9); border: 2px solid #38bdf8; border-radius: 16px; padding: 12px 24px; box-shadow: 0 10px 30px rgba(56, 189, 248, 0.25); text-align: center; max-width: 90%; transform: translateY(-5px); transition: all 0.3s ease; }
+    .quest-step { font-size: 11px; color: #38bdf8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+    .quest-text { font-size: 16px; font-weight: 700; color: #fff; margin-top: 4px; }
+    .target-highlight { color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    /* Controls Overlay */
+    .controls-bottom { padding: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+    
+    /* Virtual Joystick */
+    #joystick-zone { width: 140px; height: 140px; position: relative; pointer-events: auto; }
+    .joystick-base { width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); position: absolute; left: 10px; top: 10px; display: flex; align-items: center; justify-content: center; }
+    .joystick-stick { width: 50px; height: 50px; border-radius: 50%; background: radial-gradient(circle, #38bdf8, #0284c7); box-shadow: 0 4px 15px rgba(2, 132, 199, 0.6); position: absolute; left: 45px; top: 45px; pointer-events: none; transition: transform 0.05s linear; }
+
+    /* Action Button */
+    #action-btn { pointer-events: auto; width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #d97706); border: 4px solid #fef3c7; color: #fff; font-size: 14px; font-weight: 800; text-transform: uppercase; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 10px 25px rgba(217, 119, 6, 0.6); cursor: pointer; transition: transform 0.1s, background 0.2s; }
+    #action-btn:active { transform: scale(0.92); }
+    #action-btn.disabled { opacity: 0.35; filter: grayscale(1); pointer-events: none; }
+    #action-btn .btn-icon { font-size: 28px; }
+
+    
+    /* Player & Leaderboard HUD */
+    .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; gap: 8px; flex-wrap: wrap; }
+    .player-badge { background: rgba(18, 24, 38, 0.9); backdrop-filter: blur(8px); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; }
+    .player-avatar { font-size: 20px; }
+    .player-name { font-size: 13px; font-weight: 700; color: #fff; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .player-tag { font-size: 10px; color: #38bdf8; text-transform: uppercase; }
+
+    .btn-leaderboard { background: linear-gradient(135deg, #f59e0b, #d97706); border: 1px solid #fef3c7; border-radius: 12px; padding: 8px 14px; color: #fff; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4); pointer-events: auto; }
+    .btn-leaderboard:active { transform: scale(0.95); }
+
+    /* Leaderboard Modal */
+    .lb-card { background: #0f172a; border: 2px solid #f59e0b; border-radius: 20px; width: 92%; max-width: 440px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.85); pointer-events: auto; }
+    .lb-header { padding: 16px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+    .lb-title { font-size: 17px; font-weight: 900; color: #f59e0b; display: flex; align-items: center; gap: 8px; }
+    .lb-close { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; padding: 0 4px; line-height: 1; }
+    .lb-list { overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .lb-row { display: flex; align-items: center; justify-content: space-between; background: #1e293b; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 10px 12px; gap: 8px; font-size: 13px; }
+    .lb-row-me { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+    .lb-col-rank { width: 32px; font-weight: 900; text-align: center; font-size: 14px; }
+    .lb-col-user { flex: 1; min-width: 0; }
+    .lb-user-name { font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+    .lb-me-tag { background: #38bdf8; color: #000; font-size: 9px; font-weight: 900; padding: 1px 5px; border-radius: 4px; }
+    .lb-user-sub { font-size: 11px; color: #94a3b8; }
+    .lb-col-boxes { font-size: 12px; color: #cbd5e1; text-align: right; }
+    .lb-col-score { font-size: 15px; font-weight: 900; color: #10b981; min-width: 55px; text-align: right; }
+
+    /* Modals / Toasts */
+    .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); z-index: 50; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+    .cargo-card { background: #1e293b; border: 2px solid #ffd700; border-radius: 20px; padding: 24px; width: 340px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.8); }
+    .cargo-card h2 { color: #ffd700; font-size: 22px; margin-bottom: 12px; }
+    .cargo-card .manifest-box { background: #0f172a; border: 1px dashed #64748b; border-radius: 12px; padding: 14px; margin: 16px 0; text-align: left; font-size: 13px; line-height: 1.6; }
+    .btn-main { background: linear-gradient(135deg, #10b981, #059669); border: none; padding: 14px 28px; border-radius: 12px; color: #fff; font-size: 16px; font-weight: 800; width: 100%; cursor: pointer; }
+    
+    /* Tape Animation Screen */
+    #tape-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 40; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); }
+    .tape-banner { background: #eab308; color: #000; font-weight: 900; font-size: 28px; padding: 16px 40px; border-top: 5px solid #000; border-bottom: 5px solid #000; transform: rotate(-8deg) scale(1.1); box-shadow: 0 10px 30px rgba(0,0,0,0.7); text-transform: uppercase; letter-spacing: 2px; animation: tapePulse 0.4s infinite alternate; }
+    @keyframes tapePulse { from { transform: rotate(-8deg) scale(1.05); } to { transform: rotate(-8deg) scale(1.15); } }
+
+    /* Desktop Hint */
+    .desktop-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #64748b; background: rgba(0,0,0,0.6); padding: 4px 12px; border-radius: 8px; }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="top-bar">
+      <div class="brand-badge">
+        <div class="brand-title">📦 CARGO 9299</div>
+        <div class="brand-sub">Китай ➔ Москва</div>
+      </div>
+
+      <div class="player-badge">
+        <span class="player-avatar">👷‍♂️</span>
+        <div>
+          <div class="player-name" id="hud-player-name">Сотрудник 9299</div>
+          <div class="player-tag" id="hud-player-tag">Cargo 9299</div>
+        </div>
+      </div>
+
+      <button class="btn-leaderboard" onclick="openLeaderboard()">
+        <span>🏆</span>
+        <span>ТОП</span>
+      </button>
+
+      <div class="stats-card">
+        <div class="score-val" id="score-display">0</div>
+        <div class="level-val" id="level-display">Смена #1 • 0 коробок</div>
+      </div>
+    </div>
+      <div class="stats-card">
+        <div class="score-val" id="score-display">0</div>
+        <div class="level-val" id="level-display">Смена #1 • 0 коробок</div>
+      </div>
+    </div>
+
+    <div class="quest-banner" id="quest-banner">
+      <div class="quest-step" id="quest-step">Шаг 1 из 4</div>
+      <div class="quest-text" id="quest-text">Подойдите к компьютеру за новой накладной</div>
+    </div>
+
+    <div class="desktop-hint">Управление: WASD / Стрелки — бег • Пробел / E — действие</div>
+
+    <div class="controls-bottom">
+      <!-- Virtual Joystick -->
+      <div id="joystick-zone">
+        <div class="joystick-base"></div>
+        <div class="joystick-stick" id="joystick-stick"></div>
+      </div>
+
+      <!-- Action Button -->
+      <div id="action-btn" class="disabled">
+        <span class="btn-icon" id="action-icon">📋</span>
+        <span id="action-label">ВЗЯТЬ</span>
+      </div>
+    </div>
+  </div>
+
+    <!-- Modal: Leaderboard -->
+  <div class="modal-overlay" id="leaderboard-modal" style="display: none;">
+    <div class="lb-card">
+      <div class="lb-header">
+        <div class="lb-title"><span>🏆</span> ТАБЛИЦА ЛИДЕРОВ 9299</div>
+        <button class="lb-close" onclick="closeLeaderboard()">✕</button>
+      </div>
+      <div class="lb-list" id="leaderboard-rows">
+        <!-- Rendered dynamically -->
+      </div>
+      <div style="padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center;">
+        <button class="btn-main" onclick="closeLeaderboard()">ВЕРНУТЬСЯ НА СКЛАД</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Manifest Order -->
+  <div class="modal-overlay" id="manifest-modal" style="display: none;">
+    <div class="cargo-card">
+      <h2>📋 НАКЛАДНАЯ 9299</h2>
+      <div class="manifest-box">
+        <div><strong>Рейс:</strong> Карго Китай ➔ Москва (Южные Ворота)</div>
+        <div><strong>Клиентский код:</strong> <span class="target-highlight" id="modal-client-code">BC-103</span></div>
+        <div><strong>Сектор склада:</strong> <span id="modal-sector">BC</span></div>
+        <div><strong>Тип груза:</strong> Сборный заказ (электроника / одежда)</div>
+        <div><strong>Требование:</strong> Фирменный скотч 9299 + отправка</div>
+      </div>
+      <button class="btn-main" onclick="acceptManifest()">ПРИНЯТЬ В СБОРКУ</button>
+    </div>
+  </div>
+
+  <!-- Modal: Success Shipped -->
+  <div class="modal-overlay" id="shipped-modal" style="display: none;">
+    <div class="cargo-card">
+      <h2>🚚 ГРУЗ ОТПРАВЛЕН!</h2>
+      <div class="manifest-box" style="text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">✨📦✨</div>
+        <div style="font-size: 16px; color: #10b981; font-weight: 700;">Посылка упакована скотчем 9299</div>
+        <div style="color: #cbd5e1; margin-top: 6px;">Фура успешно загружена и выехала в Москву!</div>
+        <div style="margin-top: 10px; font-weight: 800; color: #ffd700;">+500 БАЛЛОВ</div>
+      </div>
+      <button class="btn-main" onclick="nextOrder()">СЛЕДУЮЩИЙ ЗАКАЗ</button>
+    </div>
+  </div>
+
+  <!-- Packing Tape FX Overlay -->
+  <div id="tape-overlay">
+    <div class="tape-banner">★ УПАКОВКА СКОТЧЕМ 9299 ★</div>
+  </div>
+
+  <script>
+    
+    /* =========================================================================
+       TELEGRAM WEB APP SDK & HAPTIC FEEDBACK & LEADERBOARD
+       ========================================================================= */
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+        tg.setHeaderColor('#0f172a');
+        tg.setBackgroundColor('#0f172a');
+      } catch (e) {}
+    }
+
+    const Haptic = {
+      light: () => { try { tg?.HapticFeedback?.impactOccurred('light'); } catch(e){} },
+      medium: () => { try { tg?.HapticFeedback?.impactOccurred('medium'); } catch(e){} },
+      heavy: () => { try { tg?.HapticFeedback?.impactOccurred('heavy'); } catch(e){} },
+      success: () => { try { tg?.HapticFeedback?.notificationOccurred('success'); } catch(e){} }
+    };
+
+    // User Profile Detection
+    let tgUser = tg?.initDataUnsafe?.user;
+    let playerDisplayName = tgUser ? (tgUser.first_name + (tgUser.last_name ? ' ' + tgUser.last_name : '')) : 'Сотрудник 9299';
+    let playerTag = tgUser?.username ? '@' + tgUser.username : (tgUser?.id ? 'ID:' + tgUser.id : 'Склад 9299');
+
+    document.getElementById('hud-player-name').innerText = playerDisplayName;
+    document.getElementById('hud-player-tag').innerText = playerTag;
+
+    const DEFAULT_LEADERBOARD = [
+      { name: 'BC-707 (Кирилл)', tag: '@tolkktome', boxes: 14, score: 7000 },
+      { name: 'JW-104 (Минск)', tag: 'Клиент JW', boxes: 11, score: 5500 },
+      { name: 'RU-512 (Москва)', tag: 'Опт Южные Ворота', boxes: 9, score: 4500 },
+      { name: 'XY-238 (Гродно)', tag: 'Сборный груз', boxes: 6, score: 3000 },
+      { name: 'XR-323 (Брест)', tag: 'Доставка РБ', boxes: 4, score: 2000 },
+      { name: 'BC-103 (Гомель)', tag: 'Клиент BC', boxes: 2, score: 1000 }
+    ];
+
+    function getLeaderboard() {
+      let list = [];
+      try {
+        const saved = localStorage.getItem('cargo9299_leaderboard');
+        if (saved) list = JSON.parse(saved);
+      } catch(e) {}
+      if (!list || list.length === 0) {
+        list = JSON.parse(JSON.stringify(DEFAULT_LEADERBOARD));
+      }
+
+      let myEntry = list.find(item => item.isPlayer || item.tag === playerTag);
+      if (myEntry) {
+        myEntry.score = Math.max(myEntry.score, score);
+        myEntry.boxes = Math.max(myEntry.boxes, totalShipped);
+        myEntry.name = playerDisplayName;
+        myEntry.tag = playerTag;
+        myEntry.isPlayer = true;
+      } else {
+        list.push({
+          name: playerDisplayName,
+          tag: playerTag,
+          boxes: totalShipped,
+          score: score,
+          isPlayer: true
+        });
+      }
+
+      list.sort((a, b) => b.score - a.score);
+      try { localStorage.setItem('cargo9299_leaderboard', JSON.stringify(list)); } catch(e){}
+      return list;
+    }
+
+    function openLeaderboard() {
+      Haptic.light();
+      renderLeaderboard();
+      document.getElementById('leaderboard-modal').style.display = 'flex';
+    }
+
+    function closeLeaderboard() {
+      Haptic.light();
+      document.getElementById('leaderboard-modal').style.display = 'none';
+    }
+
+    function renderLeaderboard() {
+      const list = getLeaderboard();
+      const container = document.getElementById('leaderboard-rows');
+      container.innerHTML = '';
+
+      list.forEach((item, index) => {
+        const isMe = item.isPlayer || item.tag === playerTag;
+        let rankBadge = `${index + 1}`;
+        if (index === 0) rankBadge = '🥇 1';
+        else if (index === 1) rankBadge = '🥈 2';
+        else if (index === 2) rankBadge = '🥉 3';
+
+        const row = document.createElement('div');
+        row.className = `lb-row ${isMe ? 'lb-row-me' : ''}`;
+        row.innerHTML = `
+          <div class="lb-col-rank">${rankBadge}</div>
+          <div class="lb-col-user">
+            <div class="lb-user-name">${item.name} ${isMe ? '<span class="lb-me-tag">ВЫ</span>' : ''}</div>
+            <div class="lb-user-sub">${item.tag}</div>
+          </div>
+          <div class="lb-col-boxes">${item.boxes} шт</div>
+          <div class="lb-col-score">${item.score}</div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    /* =========================================================================
+       1. SOUND EFFECTS (Web Audio API Synthesizer - 100% Offline & Pure JS)
+       ========================================================================= */
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      playPop() {
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+      },
+      playTape() {
+        this.init();
+        // Scratchy white noise burst for tape peeling / tearing
+        const bufferSize = this.ctx.sampleRate * 0.4;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.5));
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1800, this.ctx.currentTime);
+        filter.frequency.linearRampToValueAtTime(3200, this.ctx.currentTime + 0.4);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+      },
+      playTruckHorn() {
+        this.init();
+        [150, 188].forEach(freq => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.8);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.8);
+        });
+      },
+      playSuccess() {
+        this.init();
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
+          gain.gain.setValueAtTime(0.25, this.ctx.currentTime + idx * 0.1);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.1 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.1);
+          osc.stop(this.ctx.currentTime + idx * 0.1 + 0.25);
+        });
+      }
+    };
+
+    /* =========================================================================
+       2. PROCEDURAL TEXTURES (Dynamic Canvas Generation)
+       ========================================================================= */
+    function createGridFloorTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      // Concrete base
+      ctx.fillStyle = '#272d37';
+      ctx.fillRect(0, 0, 512, 512);
+      // Floor tiles
+      ctx.strokeStyle = '#1e242d';
+      ctx.lineWidth = 4;
+      for (let i = 0; i <= 512; i += 64) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createYellowTapeTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      // Bright yellow safety tape
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(0, 0, 512, 128);
+      // Red borders
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(0, 0, 512, 12);
+      ctx.fillRect(0, 116, 512, 12);
+      // Branded text
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('★ 9299 CARGO ★ МОСКВА ★', 256, 64);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    function createBoxTexture(label, isTaped = false) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      // Cardboard brown
+      ctx.fillStyle = isTaped ? '#f59e0b' : '#b4743c';
+      ctx.fillRect(0, 0, 256, 256);
+      
+      // Cardboard texture lines
+      ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+      ctx.lineWidth = 2;
+      for (let y = 0; y < 256; y += 8) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+      }
+
+      if (isTaped) {
+        // Yellow 9299 tape cross
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(0, 96, 256, 64);
+        ctx.fillRect(96, 0, 64, 256);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 22px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('9299 МОСКВА', 128, 128);
+      } else {
+        // Shipping white label
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(24, 40, 208, 176);
+        // Barcode stripes
+        ctx.fillStyle = '#000';
+        for (let x = 40; x < 216; x += 10) {
+          const w = Math.random() > 0.4 ? 6 : 3;
+          ctx.fillRect(x, 56, w, 40);
+        }
+        // Client Code text
+        ctx.font = '900 36px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, 128, 140);
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText('CARGO 9299', 128, 185);
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createZoneSignTexture(text, color = '#38bdf8') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.fillRect(0, 0, 256, 128);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, 248, 120);
+      ctx.fillStyle = color;
+      ctx.font = '900 64px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 64);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createPCTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 192;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 256, 192);
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText('> CARGO 9299 OS v2.4', 16, 32);
+      ctx.fillText('> ЗАЯВКА: МОСКВА', 16, 64);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('> ГОТОВ К ВЫДАЧЕ', 16, 96);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(16, 120, 224, 40);
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('НОВАЯ НАКЛАДНАЯ', 128, 145);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    /* =========================================================================
+       3. 3D SCENE SETUP & LIGHTING
+       ========================================================================= */
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#141824');
+    scene.fog = new THREE.FogExp2('#141824', 0.025);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 18, 18);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // Ambient & Directional Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff7ed, 0.9);
+    sunLight.position.set(12, 24, 15);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 60;
+    const d = 22;
+    sunLight.shadow.camera.left = -d;
+    sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d;
+    sunLight.shadow.camera.bottom = -d;
+    scene.add(sunLight);
+
+    // Floor
+    const floorGeo = new THREE.PlaneGeometry(36, 36);
+    const floorTex = createGridFloorTexture();
+    floorTex.wrapS = THREE.RepeatWrapping;
+    floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(6, 6);
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Safety Hazard Stripes on Floor border
+    const borderMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    const b1 = new THREE.Mesh(new THREE.BoxGeometry(36, 0.05, 0.4), borderMat);
+    b1.position.set(0, 0.02, -17.8); scene.add(b1);
+    const b2 = new THREE.Mesh(new THREE.BoxGeometry(36, 0.05, 0.4), borderMat);
+    b2.position.set(0, 0.02, 17.8); scene.add(b2);
+    const b3 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 36), borderMat);
+    b3.position.set(-17.8, 0.02, 0); scene.add(b3);
+
+    /* =========================================================================
+       4. WAREHOUSE ENVIRONMENT & ZONES
+       ========================================================================= */
+    const CLIENT_CODES = ['BC', 'JW', 'RU', 'XY', 'XR'];
+    const SECTOR_COORDS = {
+      'BC': { x: -8, z: -6 },
+      'JW': { x: -2, z: -6 },
+      'RU': { x: 4,  z: -6 },
+      'XY': { x: -8, z: 2 },
+      'XR': { x: -2, z: 2 }
+    };
+
+    const warehouseBoxes = [];
+    const interactiveZones = {};
+
+    // 1. Zone Pallets & Shelves
+    CLIENT_CODES.forEach(code => {
+      const pos = SECTOR_COORDS[code];
+      
+      // Wooden Pallet Base
+      const palletGeo = new THREE.BoxGeometry(3.2, 0.25, 3.2);
+      const palletMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.9 });
+      const pallet = new THREE.Mesh(palletGeo, palletMat);
+      pallet.position.set(pos.x, 0.12, pos.z);
+      pallet.receiveShadow = true;
+      scene.add(pallet);
+
+      // Floor Zone Label
+      const signTex = createZoneSignTexture(code, '#38bdf8');
+      const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true });
+      const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), signMat);
+      signMesh.rotation.x = -Math.PI / 2;
+      signMesh.position.set(pos.x, 0.03, pos.z + 2.2);
+      scene.add(signMesh);
+
+      // Cardboard Box in sector
+      const fullCode = `${code}-${100 + Math.floor(Math.random() * 899)}`;
+      const boxTex = createBoxTexture(fullCode);
+      const boxMat = new THREE.MeshStandardMaterial({ map: boxTex, roughness: 0.7 });
+      const boxGeo = new THREE.BoxGeometry(1.4, 1.4, 1.4);
+      const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+      boxMesh.position.set(pos.x, 0.25 + 0.7, pos.z);
+      boxMesh.castShadow = true;
+      boxMesh.receiveShadow = true;
+      scene.add(boxMesh);
+
+      // Floating 3D label sprite over box
+      boxMesh.userData = {
+        type: 'client_box',
+        sector: code,
+        clientCode: fullCode,
+        originalPos: boxMesh.position.clone()
+      };
+      warehouseBoxes.push(boxMesh);
+    });
+
+    // 2. Zone: Computer Desk (Диспетчерская)
+    const deskGroup = new THREE.Group();
+    deskGroup.position.set(-13, 0, 10);
+    // Desk table
+    const tableTop = new THREE.Mesh(new THREE.BoxGeometry(3, 0.15, 2), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+    tableTop.position.y = 1.4; tableTop.castShadow = true; deskGroup.add(tableTop);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5 });
+    [[-1.3, -0.8], [1.3, -0.8], [-1.3, 0.8], [1.3, 0.8]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4), legMat);
+      leg.position.set(lx, 0.7, lz); deskGroup.add(leg);
+    });
+    // PC Monitor
+    const monitor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 0.1), new THREE.MeshStandardMaterial({ map: createPCTexture() }));
+    monitor.position.set(0, 2.1, -0.4); monitor.castShadow = true; deskGroup.add(monitor);
+    // PC Stand
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5), legMat);
+    stand.position.set(0, 1.65, -0.4); deskGroup.add(stand);
+
+    // Glowing Beacon over PC
+    const pcLightGeo = new THREE.SphereGeometry(0.35, 16, 16);
+    const pcLightMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const pcLightMesh = new THREE.Mesh(pcLightGeo, pcLightMat);
+    pcLightMesh.position.set(0, 3.8, 0);
+    deskGroup.add(pcLightMesh);
+
+    /* =========================================================================
+       2B. DISPATCHER CHARACTER: Китайский диспетчер Ли за компьютером
+       ========================================================================= */
+    const dispatcherGroup = new THREE.Group();
+    dispatcherGroup.position.set(0, 0, -1.05); // стоит за столом лицом к игроку
+
+    // Ноги (брюки)
+    const dispPantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+    const dispLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.8), dispPantsMat);
+    dispLegL.position.set(-0.2, 0.45, 0); dispLegL.castShadow = true; dispatcherGroup.add(dispLegL);
+    const dispLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.8), dispPantsMat);
+    dispLegR.position.set(0.2, 0.45, 0); dispLegR.castShadow = true; dispatcherGroup.add(dispLegR);
+
+    // Торс (фирменное синее поло с воротником)
+    const dispShirtMat = new THREE.MeshStandardMaterial({ color: 0x0369a1, roughness: 0.6 });
+    const dispTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.38, 1.05, 12), dispShirtMat);
+    dispTorso.position.y = 1.35; dispTorso.castShadow = true; dispatcherGroup.add(dispTorso);
+
+    const dispCollarMat = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+    const dispCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.1, 12), dispCollarMat);
+    dispCollar.position.y = 1.82; dispatcherGroup.add(dispCollar);
+
+    // Голова (азиатский оттенок кожи)
+    const dispSkinMat = new THREE.MeshStandardMaterial({ color: 0xf5cfab, roughness: 0.5 });
+    const dispHead = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), dispSkinMat);
+    dispHead.position.y = 2.12; dispHead.castShadow = true; dispatcherGroup.add(dispHead);
+
+    // Черные волосы
+    const dispHairMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.9 });
+    const dispHair = new THREE.Mesh(new THREE.SphereGeometry(0.315, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), dispHairMat);
+    dispHair.position.set(0, 2.16, -0.02); dispatcherGroup.add(dispHair);
+
+    // Очки (черная оправа)
+    const dispGlassMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
+    const glassL = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.015, 8, 16), dispGlassMat);
+    glassL.position.set(-0.11, 2.12, 0.28); glassL.rotation.y = 0.08; dispatcherGroup.add(glassL);
+    const glassR = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.015, 8, 16), dispGlassMat);
+    glassR.position.set(0.11, 2.12, 0.28); glassR.rotation.y = -0.08; dispatcherGroup.add(glassR);
+    const glassBridge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.015, 0.01), dispGlassMat);
+    glassBridge.position.set(0, 2.12, 0.29); dispatcherGroup.add(glassBridge);
+
+    // Фирменная кепка Cargo 9299
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.4 });
+    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.33, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), capMat);
+    capDome.position.y = 2.24; dispatcherGroup.add(capDome);
+    const capVisor = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.04, 16, 1, false, -Math.PI*0.35, Math.PI*0.7), capMat);
+    capVisor.position.set(0, 2.24, 0.14); capVisor.rotation.x = 0.12; dispatcherGroup.add(capVisor);
+
+    // Левая рука (опирается на стол)
+    const dispArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.65), dispShirtMat);
+    dispArmL.position.set(-0.48, 1.45, 0.25); dispArmL.rotation.x = 0.65; dispatcherGroup.add(dispArmL);
+
+    // Правая рука (держит планшет с накладной 9299 и машет игроку)
+    const dispArmRGroup = new THREE.Group();
+    dispArmRGroup.position.set(0.5, 1.6, 0);
+    const dispArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.65), dispShirtMat);
+    dispArmR.position.y = -0.3; dispArmRGroup.add(dispArmR);
+
+    // Планшет (Clipboard)
+    const boardMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
+    const clipboard = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.02), boardMat);
+    clipboard.position.set(0, -0.58, 0.18); clipboard.rotation.x = -0.4; dispArmRGroup.add(clipboard);
+
+    const paperMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.42), paperMat);
+    paper.position.set(0, -0.58, 0.195); paper.rotation.x = -0.4; dispArmRGroup.add(paper);
+
+    dispatcherGroup.add(dispArmRGroup);
+    deskGroup.add(dispatcherGroup);
+
+    // 3D Табличка над диспетчером
+    function createDispatcherSign() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 384;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.roundRect(8, 8, 368, 112, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 26px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🧑‍💼 Диспетчер Ли (Гуанчжоу)', 192, 46);
+      ctx.fillStyle = '#fde047';
+      ctx.font = 'bold 22px -apple-system, sans-serif';
+      ctx.fillText('📄 Возьми накладную 9299!', 192, 86);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const sprMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sprite = new THREE.Sprite(sprMat);
+      sprite.scale.set(3.4, 1.15, 1);
+      sprite.position.set(0, 3.25, -1.05);
+      return sprite;
+    }
+    const dispatcherSign = createDispatcherSign();
+    deskGroup.add(dispatcherSign);
+
+    scene.add(deskGroup);
+    interactiveZones.pcDesk = { pos: deskGroup.position, radius: 2.8, name: 'pc' };
+
+    // 3. Zone: Packaging Table (Упаковка скотчем 9299)
+    const packTableGroup = new THREE.Group();
+    packTableGroup.position.set(8, 0, 2);
+    // Table
+    const packTable = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.2, 2.2), new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 }));
+    packTable.position.y = 1.4; packTable.castShadow = true; packTableGroup.add(packTable);
+    [[-1.6, -0.9], [1.6, -0.9], [-1.6, 0.9], [1.6, 0.9]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.4, 0.12), legMat);
+      leg.position.set(lx, 0.7, lz); packTableGroup.add(leg);
+    });
+    // Yellow Tape Rolls on table
+    const tapeRollGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.2, 24);
+    const tapeRollMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
+    const tapeRoll1 = new THREE.Mesh(tapeRollGeo, tapeRollMat);
+    tapeRoll1.position.set(-1.1, 1.6, 0.4); packTableGroup.add(tapeRoll1);
+    const tapeRoll2 = new THREE.Mesh(tapeRollGeo, tapeRollMat);
+    tapeRoll2.position.set(-1.1, 1.8, 0.4); packTableGroup.add(tapeRoll2);
+    // Table Sign
+    const packSign = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.8), new THREE.MeshBasicMaterial({ map: createZoneSignTexture('УПАКОВКА 9299', '#facc15') }));
+    packSign.position.set(0, 2.2, 1.15); packTableGroup.add(packSign);
+    scene.add(packTableGroup);
+    interactiveZones.packStation = { pos: packTableGroup.position, radius: 3.0, name: 'pack' };
+
+    // 4. Zone: Shipping Gate (Ворота отгрузки на Москву)
+    const gateGroup = new THREE.Group();
+    gateGroup.position.set(13.5, 0, -10);
+    // Big Roller Gate Frame
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+    const postL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 6, 0.5), frameMat);
+    postL.position.set(-3, 3, 0); gateGroup.add(postL);
+    const postR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 6, 0.5), frameMat);
+    postR.position.set(3, 3, 0); gateGroup.add(postR);
+    const postTop = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.8, 0.6), frameMat);
+    postTop.position.set(0, 5.8, 0); gateGroup.add(postTop);
+    // Gate Sign
+    const gateSign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.2), new THREE.MeshBasicMaterial({ map: createZoneSignTexture('🚚 НА МОСКВУ', '#10b981') }));
+    gateSign.position.set(0, 5.8, 0.35); gateGroup.add(gateSign);
+    // Roller shutter (half open)
+    const shutter = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.5, 0.1), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 }));
+    shutter.position.set(0, 4.2, 0); gateGroup.add(shutter);
+    // Conveyor Ramp
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 5), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+    ramp.position.set(0, 0.6, -1); ramp.rotation.x = -0.15; ramp.receiveShadow = true; gateGroup.add(ramp);
+    
+    // Cargo 9299 Truck outside gate
+    const truckGroup = new THREE.Group();
+    truckGroup.position.set(0, 0, -5.5);
+    // Truck trailer
+    const trailer = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.2, 6.5), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+    trailer.position.y = 2.4; truckGroup.add(trailer);
+    // Truck cab
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.8, 2.6), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+    cab.position.set(0, 2.0, -4.5); truckGroup.add(cab);
+    gateGroup.add(truckGroup);
+    scene.add(gateGroup);
+    interactiveZones.gate = { pos: new THREE.Vector3(13.5, 0, -8), radius: 3.2, name: 'gate' };
+
+    /* =========================================================================
+       5. 3D CHARACTER (Warehouse Worker with Hard Hat & Safety Vest)
+       ========================================================================= */
+    const playerGroup = new THREE.Group();
+    playerGroup.position.set(0, 0, 5);
+
+    // Body / Vest (High-vis Orange)
+    const vestMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 });
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.4, 1.1, 12), vestMat);
+    torso.position.y = 1.35; torso.castShadow = true; playerGroup.add(torso);
+
+    // Reflective Silver Stripes
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+    const stripe1 = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.12, 12), stripeMat);
+    stripe1.position.y = 1.45; playerGroup.add(stripe1);
+    const stripe2 = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.12, 12), stripeMat);
+    stripe2.position.y = 1.15; playerGroup.add(stripe2);
+
+    // Head
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.6 });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), headMat);
+    head.position.y = 2.15; head.castShadow = true; playerGroup.add(head);
+
+    // Yellow Construction Hard Hat (Каска)
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.3 });
+    const hatDome = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), hatMat);
+    hatDome.position.y = 2.25; playerGroup.add(hatDome);
+    const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 16), hatMat);
+    hatBrim.position.y = 2.25; playerGroup.add(hatBrim);
+
+    // Legs
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.8 });
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.8), pantsMat);
+    legL.position.set(-0.22, 0.45, 0); legL.castShadow = true; playerGroup.add(legL);
+    const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.8), pantsMat);
+    legR.position.set(0.22, 0.45, 0); legR.castShadow = true; playerGroup.add(legR);
+
+    // Hands / Arms
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.7), vestMat);
+    armL.position.set(-0.55, 1.4, 0); playerGroup.add(armL);
+    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.7), vestMat);
+    armR.position.set(0.55, 1.4, 0); playerGroup.add(armR);
+
+    // Carried Box Holder overhead
+    const carryContainer = new THREE.Group();
+    carryContainer.position.set(0, 2.9, 0);
+    playerGroup.add(carryContainer);
+
+    scene.add(playerGroup);
+
+    // Target Ground Guidance Indicator (Pulsing ring)
+    const targetRingGeo = new THREE.RingGeometry(1.2, 1.5, 32);
+    const targetRingMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+    const targetRing = new THREE.Mesh(targetRingGeo, targetRingMat);
+    targetRing.rotation.x = -Math.PI / 2;
+    targetRing.position.y = 0.05;
+    scene.add(targetRing);
+
+    /* =========================================================================
+       6. GAME STATE & QUEST ENGINE
+       ========================================================================= */
+    const GAME_STATES = {
+      GET_MANIFEST: 1,    // Step 1: Go to PC
+      FIND_BOX: 2,        // Step 2: Find target client box
+      GO_TO_PACKING: 3,   // Step 3: Carry box to packing table
+      PACKING_ANIM: 4,    // Step 4: Animation wrapping 9299 tape
+      SHIP_TO_GATE: 5     // Step 5: Deliver packed box to Moscow gate
+    };
+
+    let currentState = GAME_STATES.GET_MANIFEST;
+    let currentOrder = null;
+    let carriedBox = null;
+    let isPacked9299 = false;
+    let score = 0;
+    let totalShipped = 0;
+
+    function initOrder() {
+      // Pick random client code from available boxes
+      const targetBoxMesh = warehouseBoxes[Math.floor(Math.random() * warehouseBoxes.length)];
+      currentOrder = {
+        clientCode: targetBoxMesh.userData.clientCode,
+        sector: targetBoxMesh.userData.sector,
+        boxMesh: targetBoxMesh
+      };
+      
+      currentState = GAME_STATES.GET_MANIFEST;
+      updateUI();
+    }
+
+    function updateUI() {
+      const stepEl = document.getElementById('quest-step');
+      const textEl = document.getElementById('quest-text');
+      const btn = document.getElementById('action-btn');
+      const btnLabel = document.getElementById('action-label');
+      const btnIcon = document.getElementById('action-icon');
+
+      document.getElementById('score-display').innerText = score;
+      document.getElementById('level-display').innerText = `Смена #1 • ${totalShipped} коробок`;
+
+      if (currentState === GAME_STATES.GET_MANIFEST) {
+        stepEl.innerText = 'Шаг 1 из 4 • Диспетчер';
+        textEl.innerHTML = 'Подойдите к <span class="target-highlight">компьютеру</span> за накладной на Москву';
+        targetRing.visible = true;
+        targetRing.position.set(interactiveZones.pcDesk.pos.x, 0.05, interactiveZones.pcDesk.pos.z);
+        targetRingMat.color.setHex(0x38bdf8);
+      } else if (currentState === GAME_STATES.FIND_BOX) {
+        stepEl.innerText = 'Шаг 2 из 4 • Поиск груза';
+        textEl.innerHTML = `Найдите в секторе <strong>[${currentOrder.sector}]</strong> коробку <span class="target-highlight">${currentOrder.clientCode}</span>`;
+        targetRing.visible = true;
+        targetRing.position.set(currentOrder.boxMesh.position.x, 0.05, currentOrder.boxMesh.position.z);
+        targetRingMat.color.setHex(0xf59e0b);
+      } else if (currentState === GAME_STATES.GO_TO_PACKING) {
+        stepEl.innerText = 'Шаг 3 из 4 • Упаковка';
+        textEl.innerHTML = 'Несите коробку на <span class="target-highlight">стол упаковки</span>';
+        targetRing.visible = true;
+        targetRing.position.set(interactiveZones.packStation.pos.x, 0.05, interactiveZones.packStation.pos.z);
+        targetRingMat.color.setHex(0xfacc15);
+      } else if (currentState === GAME_STATES.SHIP_TO_GATE) {
+        stepEl.innerText = 'Шаг 4 из 4 • Отгрузка';
+        textEl.innerHTML = 'Относите фирменный груз к <span class="target-highlight">Воротам на Москву</span>!';
+        targetRing.visible = true;
+        targetRing.position.set(interactiveZones.gate.pos.x, 0.05, interactiveZones.gate.pos.z);
+        targetRingMat.color.setHex(0x10b981);
+      }
+      checkActionAvailability();
+    }
+
+    function checkActionAvailability() {
+      const btn = document.getElementById('action-btn');
+      const btnLabel = document.getElementById('action-label');
+      const btnIcon = document.getElementById('action-icon');
+      const playerPos = playerGroup.position;
+
+      btn.classList.add('disabled');
+
+      if (currentState === GAME_STATES.GET_MANIFEST) {
+        const dist = playerPos.distanceTo(interactiveZones.pcDesk.pos);
+        if (dist < interactiveZones.pcDesk.radius) {
+          btn.classList.remove('disabled');
+          btnLabel.innerText = 'НАКЛАДНАЯ';
+          btnIcon.innerText = '📋';
+        }
+      } else if (currentState === GAME_STATES.FIND_BOX) {
+        const dist = playerPos.distanceTo(currentOrder.boxMesh.position);
+        if (dist < 2.5) {
+          btn.classList.remove('disabled');
+          btnLabel.innerText = 'ПОДНЯТЬ';
+          btnIcon.innerText = '📦';
+        }
+      } else if (currentState === GAME_STATES.GO_TO_PACKING) {
+        const dist = playerPos.distanceTo(interactiveZones.packStation.pos);
+        if (dist < interactiveZones.packStation.radius) {
+          btn.classList.remove('disabled');
+          btnLabel.innerText = 'СКОТЧ 9299';
+          btnIcon.innerText = '⚡';
+        }
+      } else if (currentState === GAME_STATES.SHIP_TO_GATE) {
+        const dist = playerPos.distanceTo(interactiveZones.gate.pos);
+        if (dist < interactiveZones.gate.radius) {
+          btn.classList.remove('disabled');
+          btnLabel.innerText = 'ОТГРУЗИТЬ';
+          btnIcon.innerText = '🚚';
+        }
+      }
+    }
+
+    /* Action Handler (Triggered by button click or Space/E) */
+    function triggerAction() {
+      AudioEngine.init();
+      if (currentState === GAME_STATES.GET_MANIFEST) {
+        // Show manifest modal
+        document.getElementById('modal-client-code').innerText = currentOrder.clientCode;
+        document.getElementById('modal-sector').innerText = currentOrder.sector;
+        document.getElementById('manifest-modal').style.display = 'flex';
+        AudioEngine.playPop();
+        Haptic.medium();
+      } else if (currentState === GAME_STATES.FIND_BOX) {
+        // Lift box
+        carriedBox = currentOrder.boxMesh;
+        scene.remove(carriedBox);
+        carriedBox.position.set(0, 0, 0);
+        carryContainer.add(carriedBox);
+        Haptic.medium();
+        armL.rotation.x = Math.PI;
+        armR.rotation.x = Math.PI;
+        currentState = GAME_STATES.GO_TO_PACKING;
+        AudioEngine.playPop();
+        updateUI();
+      } else if (currentState === GAME_STATES.GO_TO_PACKING) {
+        // Start packaging animation
+        currentState = GAME_STATES.PACKING_ANIM;
+        const tapeOverlay = document.getElementById('tape-overlay');
+        tapeOverlay.style.display = 'flex';
+        AudioEngine.playTape();
+        Haptic.heavy();
+
+        setTimeout(() => {
+          // Replace box texture with yellow 9299 branded tape
+          carriedBox.material.map = createBoxTexture(currentOrder.clientCode, true);
+          carriedBox.material.needsUpdate = true;
+          isPacked9299 = true;
+          tapeOverlay.style.display = 'none';
+          currentState = GAME_STATES.SHIP_TO_GATE;
+          AudioEngine.playSuccess();
+          updateUI();
+        }, 1200);
+      } else if (currentState === GAME_STATES.SHIP_TO_GATE) {
+        // Load into truck
+        carryContainer.remove(carriedBox);
+        scene.add(carriedBox);
+        carriedBox.position.set(13.5, 1.5, -12);
+        armL.rotation.x = 0;
+        armR.rotation.x = 0;
+        carriedBox = null;
+        
+        AudioEngine.playTruckHorn();
+        Haptic.success();
+        score += 500;
+        totalShipped += 1;
+        getLeaderboard();
+        
+        // Show shipped modal
+        document.getElementById('shipped-modal').style.display = 'flex';
+      }
+    }
+
+    function acceptManifest() {
+      document.getElementById('manifest-modal').style.display = 'none';
+      currentState = GAME_STATES.FIND_BOX;
+      AudioEngine.playPop();
+      updateUI();
+    }
+
+    function nextOrder() {
+      document.getElementById('shipped-modal').style.display = 'none';
+      // Respawn all warehouse boxes
+      warehouseBoxes.forEach(b => {
+        b.material.map = createBoxTexture(b.userData.clientCode, false);
+        b.material.needsUpdate = true;
+        b.position.copy(b.userData.originalPos);
+        if (!scene.children.includes(b)) scene.add(b);
+      });
+      initOrder();
+    }
+
+    document.getElementById('action-btn').addEventListener('click', triggerAction);
+
+    /* =========================================================================
+       7. CONTROLS: DESKTOP KEYBOARD & MOBILE TOUCH JOYSTICK
+       ========================================================================= */
+    const keys = {};
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'Space' || e.code === 'KeyE') {
+        const btn = document.getElementById('action-btn');
+        if (!btn.classList.contains('disabled')) triggerAction();
+      }
+    });
+    window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+    // Touch Joystick
+    const joystickZone = document.getElementById('joystick-zone');
+    const joystickStick = document.getElementById('joystick-stick');
+    let joystickActive = false;
+    let joystickDelta = { x: 0, y: 0 };
+    const maxDist = 45;
+
+    function handleTouchMove(touch) {
+      const rect = joystickZone.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let dx = touch.clientX - centerX;
+      let dy = touch.clientY - centerY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+      joystickStick.style.transform = `translate(${dx}px, ${dy}px)`;
+      joystickDelta = { x: dx / maxDist, y: dy / maxDist };
+    }
+
+    joystickZone.addEventListener('touchstart', e => {
+      joystickActive = true;
+      handleTouchMove(e.touches[0]);
+    }, { passive: false });
+
+    window.addEventListener('touchmove', e => {
+      if (joystickActive) {
+        handleTouchMove(e.touches[0]);
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', () => {
+      joystickActive = false;
+      joystickDelta = { x: 0, y: 0 };
+      joystickStick.style.transform = 'translate(0px, 0px)';
+    });
+
+    /* =========================================================================
+       8. MAIN GAME LOOP & ANIMATION
+       ========================================================================= */
+    const clock = new THREE.Clock();
+    const moveSpeed = 8.5;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      
+      // Dispatcher Ли animation (idle breathing & waving clipboard)
+      if (typeof dispHead !== 'undefined') {
+        dispHead.rotation.y = Math.sin(time * 1.5) * 0.15;
+        dispHead.position.y = 2.12 + Math.sin(time * 2) * 0.02;
+        dispArmRGroup.rotation.z = Math.sin(time * 3) * 0.15;
+        dispArmRGroup.rotation.x = 0.4 + Math.sin(time * 3.5) * 0.25;
+        dispatcherSign.position.y = 3.25 + Math.sin(time * 2) * 0.06;
+      }
+
+      // Beacon & Target Ring pulse
+      pcLightMesh.position.y = 3.4 + Math.sin(time * 4) * 0.15;
+      targetRing.scale.setScalar(1 + Math.sin(time * 5) * 0.08);
+
+      // Input Movement Vector
+      let moveX = 0;
+      let moveZ = 0;
+
+      if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+      if (joystickActive) {
+        moveX = joystickDelta.x;
+        moveZ = joystickDelta.y;
+      }
+
+      const inputLen = Math.hypot(moveX, moveZ);
+      if (inputLen > 0.1) {
+        const dirX = moveX / (inputLen > 1 ? inputLen : 1);
+        const dirZ = moveZ / (inputLen > 1 ? inputLen : 1);
+
+        playerGroup.position.x += dirX * moveSpeed * delta;
+        playerGroup.position.z += dirZ * moveSpeed * delta;
+
+        // Keep inside warehouse boundaries
+        playerGroup.position.x = Math.max(-16.5, Math.min(16.5, playerGroup.position.x));
+        playerGroup.position.z = Math.max(-16.5, Math.min(16.5, playerGroup.position.z));
+
+        // Rotate character towards movement direction
+        const targetAngle = Math.atan2(dirX, dirZ);
+        playerGroup.rotation.y = targetAngle;
+
+        // Walking leg swing animation
+        legL.rotation.x = Math.sin(time * 12) * 0.6;
+        legR.rotation.x = -Math.sin(time * 12) * 0.6;
+        torso.position.y = 1.35 + Math.abs(Math.sin(time * 12)) * 0.08;
+      } else {
+        legL.rotation.x = 0;
+        legR.rotation.x = 0;
+        torso.position.y = 1.35;
+      }
+
+      // Smooth Camera follow (Isometric view)
+      const targetCamX = playerGroup.position.x;
+      const targetCamY = playerGroup.position.y + 14;
+      const targetCamZ = playerGroup.position.z + 14;
+      camera.position.x += (targetCamX - camera.position.x) * 0.1;
+      camera.position.y += (targetCamY - camera.position.y) * 0.1;
+      camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+      camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
+
+      // Check distance to interactive elements
+      checkActionAvailability();
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Start Game
+    initOrder();
+    animate();
+  </script>
+</body>
+</html>
